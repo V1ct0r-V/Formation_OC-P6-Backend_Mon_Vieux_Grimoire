@@ -13,9 +13,10 @@ mongoose
   .then(() => console.log("Connexion à MongoDB réussie !"))
   .catch(() => console.log("Connexion à MongoDB échouée !"));
 
-/* Import des routes */
+/* Import des routes et des données */
 const booksRoutes = require("./routes/books.js");
 const userRoutes = require("./routes/user.js");
+const path = require("path");
 
 /* Configuration des headers de l'application pour : */
 app.use((req, res, next) => {
@@ -35,6 +36,7 @@ app.use((req, res, next) => {
 });
 
 /* Configuration des routeurs de l'application */
+app.use("/images", express.static(path.join(__dirname, "images")));
 app.use("/api/books", booksRoutes);
 app.use("/api/auth", userRoutes);
 
