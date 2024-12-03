@@ -35,6 +35,9 @@ app.use((req, res, next) => {
   next();
 });
 
+/* Middleware pour parser les données JSON */
+app.use(express.json());
+
 /* Configuration des routeurs de l'application */
 app.use("/images", express.static(path.join(__dirname, "images")));
 app.use("/api/books", booksRoutes);

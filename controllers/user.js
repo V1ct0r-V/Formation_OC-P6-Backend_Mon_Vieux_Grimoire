@@ -3,33 +3,41 @@ const bcrypt = require("bcrypt");
 const User = require("../models/User");
 
 exports.signup = (req, res, next) => {
-  bcrypt
-    // .hash(req.body.password, 10)
-    .hash("coucou", 10)
-    .then((hash) => {
-      const user = new User({
-        // email: req.body.email,
-        email: "victor@gmail.com",
-        password: hash,
-      });
-      user
-        .save()
-        .then(() => res.status(201).json({ message: "Utilisateur créé !" }))
-        .catch((error) => res.status(400).json({ error }));
+  // Rechercher un utilisateur avec l'email fourni
+  User.findOne({ email: req.body.email })
+    .then((UserAlreadyExist) => {
+      if (UserAlreadyExist) {
+        return res.status(400).json({
+          error: "L'adresse email que vous avez entrée est déjà utilisée.",
+        });
+      }
+
+      bcrypt
+        .hash(req.body.password, 10)
+        .then((hash) => {
+          const user = new User({
+            email: req.body.email,
+            password: hash,
+          });
+
+          user
+            .save()
+            .then(() => res.status(201).json({ message: "Utilisateur créé !" }))
+            .catch((error) => res.status(400).json({ error }));
+        })
+        .catch((error) => res.status(500).json({ error }));
     })
     .catch((error) => res.status(500).json({ error }));
 };
 
 exports.login = (req, res, next) => {
-  // User.findOne({ email: req.body.email })
-  User.findOne({ email: "victor@gmail.com" })
+  User.findOne({ email: req.body.email })
     .then((user) => {
       if (!user) {
         return res.status(401).json({ error: "Utilisateur non trouvé !" });
       }
       bcrypt
-        // .compare(req.body.password, user.password)
-        .compare("coucou", user.password)
+        .compare(req.body.password, user.password)
         .then((valid) => {
           if (!valid) {
             return res.status(401).json({ error: "Mot de passe incorrect !" });
