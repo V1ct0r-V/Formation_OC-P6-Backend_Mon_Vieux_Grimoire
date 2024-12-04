@@ -1,5 +1,6 @@
 const Book = require("../models/Book");
 const fs = require("fs");
+const sharp = require("sharp");
 
 // Lire les données de tous les livres (GET /)
 exports.getAllBooks = (req, res, next) => {
@@ -18,57 +19,78 @@ exports.getOneBook = (req, res, next) => {
 // Créer les données d'un nouveau livre (POST /:id)
 exports.createBook = (req, res, next) => {
   const bookObject = JSON.parse(req.body.book);
-  // delete bookObject._id;
   delete bookObject.userId;
-  const book = new Book({
-    ...bookObject,
-    userId: req.auth.userId,
-    imageUrl: `${req.protocol}://${req.get("host")}/images/${
-      req.file.filename
-    }`,
-  });
 
-  book
-    .save()
+  // Optimisation de l'image
+  const date = Date.now();
+  const ImageName = req.file.filename.split(".")[0];
+  const optimizedImageName = `${date}-${ImageName}.webp`;
+
+  sharp(req.file.path)
+    .webp({ quality: 20 })
+    .toFile(`images/${optimizedImageName}`) // Sauvegarde de l'image optimisée
     .then(() => {
-      res.status(201).json({ message: "Objet enregistré !" });
+      const book = new Book({
+        ...bookObject,
+        userId: req.auth.userId,
+        imageUrl: `${req.protocol}://${req.get(
+          "host"
+        )}/images/${optimizedImageName}`,
+      });
+      return book.save();
+    })
+    .then(() => {
+      res.status(201).json({ message: "Livre enregistré !" });
     })
     .catch((error) => {
       console.log(error);
-      res.status(400).json({ error });
+      res.status(500).json({ error });
     });
 };
 
 // Modification des données d'un livre (PUT /:id)
 exports.modifyBook = (req, res, next) => {
   const bookObject = req.file
-    ? {
-        ...JSON.parse(req.body.book),
-        imageUrl: `${req.protocol}://${req.get("host")}/images/${
-          req.file.filename
-        }`,
-      }
+    ? { ...JSON.parse(req.body.book) }
     : { ...req.body };
 
   delete bookObject.userId;
+
   Book.findOne({ _id: req.params.id })
     .then((book) => {
-      if (book.userId != req.auth.userId) {
-        res.status(401).json({ message: "Not authorized" });
-      } else {
-        Book.updateOne(
-          { _id: req.params.id },
-          { ...bookObject, _id: req.params.id }
-        )
-          .then(() => res.status(200).json({ message: "Objet modifié!" }))
-          .catch((error) => {
-            console.log(error);
-            res.status(401).json({ error });
-          });
-      }
+      // Suppression de l'ancienne image
+      const oldFilename = book.imageUrl.split("/images/")[1];
+      fs.unlink(`images/${oldFilename}`, (err) => {
+        if (err)
+          console.warn("Ancienne image non trouvée ou déjà supprimée :", err);
+      });
+
+      // Optimisation de l'image
+      const date = Date.now();
+      const ImageName = req.file.filename.split(".")[0];
+      const optimizedImageName = `${date}-${ImageName}.webp`;
+
+      return sharp(req.file.path)
+        .webp({ quality: 20 })
+        .toFile(`images/${optimizedImageName}`)
+        .then(() => {
+          // Mise à jour de l'URL de l'image
+          bookObject.imageUrl = `${req.protocol}://${req.get(
+            "host"
+          )}/images/${optimizedImageName}`;
+
+          return Book.updateOne(
+            { _id: req.params.id },
+            { ...bookObject, _id: req.params.id }
+          );
+        });
+    })
+    .then(() => {
+      res.status(200).json({ message: "Livre modifié avec succès !" });
     })
     .catch((error) => {
-      res.status(400).json({ error });
+      console.log(error);
+      res.status(500).json({ error });
     });
 };
 
