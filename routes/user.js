@@ -3,7 +3,8 @@ const router = express.Router();
 
 const userCtrl = require("../controllers/user");
 
-router.post("/signup", userCtrl.signup);
-router.post("/login", userCtrl.login);
+// Définition des routes concernant les utilisateurs :
+router.post("/signup", userCtrl.signup); // Inscription de l'utilisateur
+router.post("/login", userCtrl.login); // Connexion de l'utilisateur préalablement inscrit
 
 module.exports = router;
