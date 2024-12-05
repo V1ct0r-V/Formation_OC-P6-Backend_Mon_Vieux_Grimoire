@@ -2,7 +2,7 @@ const jwt = require("jsonwebtoken"); // Bibliothèque jsonwebtoken pour la gesti
 const bcrypt = require("bcrypt"); // Bibliothèque bcrypt pour le cryptage de mots de passe
 const User = require("../models/User");
 
-exports.signup = (req, res) => {
+exports.signup = (req, res, next) => {
   User.findOne({ email: req.body.email })
     .then((UserAlreadyExist) => {
       // Vérification de l'existence d'un utilisateur existant avec l'email fourni (éviter les doublons d'ID)
@@ -31,7 +31,7 @@ exports.signup = (req, res) => {
     .catch((error) => res.status(500).json({ error })); // Renvoi d'une erreur au client
 };
 
-exports.login = (req, res) => {
+exports.login = (req, res, next) => {
   User.findOne({ email: req.body.email })
     .then((user) => {
       // Vérification de l'existence de l'email utilisateur dans la BDD

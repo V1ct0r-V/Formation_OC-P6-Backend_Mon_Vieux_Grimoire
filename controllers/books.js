@@ -3,21 +3,25 @@ const fs = require("fs"); // Bibliothèque FileSystem pour interagir avec le sys
 const sharp = require("sharp"); // Bibliothèque Sharp pour le traitement des images
 
 // Lire les données de tous les livres (GET /)
-exports.getAllBooks = (res) => {
+exports.getAllBooks = (req, res, next) => {
   Book.find()
-    .then((book) => res.status(200).json(book))
-    .catch((error) => res.status(400).json({ error: error }));
+    .then((book) => {
+      res.status(200).json(book);
+    })
+    .catch((error) => {
+      res.status(400).json({ error: error });
+    });
 };
 
 // Lire les données d'un livre (GET /:id)
-exports.getOneBook = (req, res) => {
+exports.getOneBook = (req, res, next) => {
   Book.findOne({ _id: req.params.id })
     .then((book) => res.status(201).json(book))
     .catch((error) => res.status(400).json({ error }));
 };
 
 // Créer les données d'un nouveau livre (POST /:id)
-exports.createBook = (req, res) => {
+exports.createBook = (req, res, next) => {
   // Récupération et préparation des données du livre
   const bookObject = JSON.parse(req.body.book); // Récupération et conversion des données du livre présent dans la requête du serveur au client
   delete bookObject.userId; // Suppression de l'ID utilisateur obtenu dans la requête pour éviter les attaques par manipulation de paramètres
@@ -52,41 +56,63 @@ exports.createBook = (req, res) => {
 };
 
 // Modification des données d'un livre (PUT /:id)
-exports.modifyBook = (req, res) => {
-  // Récupération et préparation des données du livre
-  const bookObject = JSON.parse(req.body.book); // Récupération et conversion des données du livre présent dans la requête du serveur au client
-  delete bookObject.userId; // Suppression de l'ID utilisateur obtenu dans la requête pour éviter les attaques par manipulation de paramètres
+exports.modifyBook = (req, res, next) => {
+  const bookObject = req.file ? JSON.parse(req.body.book) : req.body;
+  delete bookObject.userId;
 
+  // Rechercher le livre par son ID
   Book.findOne({ _id: req.params.id })
     .then((book) => {
-      // Suppression de l'ancienne image du répertoire en utilisant la bibliothèque "fs"
-      const oldImageName = book.imageUrl.split("/images/")[1]; // Récupération du nom de l'image
-      fs.unlink(`images/${oldImageName}`, (error) => {
-        if (error)
-          console.log("Ancienne image non trouvée ou déjà supprimée :", error);
-      });
+      if (!book) {
+        return res.status(404).json({ message: "Livre non trouvé." });
+      }
 
-      // Création du nom de l'image optimisée
-      const date = Date.now();
-      const ImageName = req.file.filename.split(".")[0];
-      const optimizedImageName = `${date}-${ImageName}.webp`;
+      // Si l'utilisateur n'est pas autorisé à modifier le livre
+      if (book.userId !== req.auth.userId) {
+        return res
+          .status(401)
+          .json({ message: "Vous n'êtes pas autorisé à modifier ce livre." });
+      }
 
-      // Optimisation et sauvegarde de l'image grâce à la bibliothèque Sharp
-      sharp(req.file.path)
-        .webp({ quality: 20 }) // Format et qualité de l'image
-        .resize({ width: 206, height: 260, fit: "cover" }) // Redimensionnement de l'image
-        .toFile(`images/${optimizedImageName}`) // Sauvegarde de l'image optimisée dans le répertoire
-        .then(() => {
-          (bookObject.userId = req.auth.userId), // Ajout de l'ID utilisateur obtenu par le serveur (voir middleware/auth.js)
-            (bookObject.imageUrl = `${req.protocol}://${req.get(
-              "host"
-            )}/images/${optimizedImageName}`); // Ajout de l'URL de l'image optimisée
+      // Si une nouvelle image est envoyée :
+      if (req.file) {
+        const oldImageName = book.imageUrl.split("/images/")[1];
 
-          return Book.updateOne({ _id: req.params.id }, { ...bookObject }); // Envoi de la réponse du serveur au client
+        // - Suppression de l'ancienne image
+        fs.unlink(`images/${oldImageName}`, (error) => {
+          if (error) {
+            console.log(
+              "Ancienne image non trouvée ou déjà supprimée :",
+              error
+            );
+          }
         });
+
+        // - Génération d'un nom unique pour la nouvelle image optimisée
+        const date = Date.now();
+        const ImageName = req.file.filename.split(".")[0];
+        const optimizedImageName = `${date}-${ImageName}.webp`;
+
+        // - Optimisation et sauvegarde de la nouvelle image
+        return sharp(req.file.path)
+          .webp({ quality: 20 })
+          .resize({ width: 206, height: 260, fit: "cover" })
+          .toFile(`images/${optimizedImageName}`)
+          .then(() => {
+            // MAJ de l'URL de l'image dans bookObject
+            bookObject.imageUrl = `${req.protocol}://${req.get(
+              "host"
+            )}/images/${optimizedImageName}`;
+
+            return Book.updateOne({ _id: req.params.id }, { ...bookObject }); // Renvoi du livre modifié dans la BDD
+          });
+      } else {
+        // MAJ directe des données si pas de nouvelle image uploadée
+        return Book.updateOne({ _id: req.params.id }, { ...bookObject });
+      }
     })
     .then(() => {
-      res.status(200).json({ message: "Livre modifié avec succès !" }); // Renvoi de la confirmation d'enregistrement au client
+      res.status(200).json({ message: "Livre modifié avec succès !" }); // Renvoi du succès de la modification au client
     })
     .catch((error) => {
       console.log(error);
@@ -95,7 +121,7 @@ exports.modifyBook = (req, res) => {
 };
 
 // Suppression des données d'un livre (DELETE /:id)
-exports.deleteBook = (req, res) => {
+exports.deleteBook = (req, res, next) => {
   Book.findOne({ _id: req.params.id })
     .then((book) => {
       // Vérification que l'utilisateur demandant la modification est bien le créateur du livre sur le site
@@ -126,7 +152,7 @@ exports.deleteBook = (req, res) => {
 };
 
 // Ajout d'une note à un livre (POST /:id/rating)
-exports.rateBook = (req, res) => {
+exports.rateBook = (req, res, next) => {
   const { userId, rating } = req.body;
 
   // Vérification que la note est comprise entre 1 et 5
@@ -187,7 +213,7 @@ exports.rateBook = (req, res) => {
 };
 
 // Récupération des 3 livres les mieux notés (GET /bestrating)
-exports.getBestRating = (res) => {
+exports.getBestRating = (req, res, next) => {
   Book.find()
     .sort({ averageRating: "descending" }) // Tri décroissant de la liste des livres selon le paramètre "note moyenne"
     .limit(3) // Réduction de la liste à 3 livres
